@@ -1,0 +1,16 @@
+# data and outputs
+/pairs/
+/pairs2/
+/pairs3/
+/pairs4/
+/selected/
+/cache/
+/caption_input/
+/nebius_out/
+/*.zip
+/pairs.csv
+/pairs4.log
+/captions_raw*.json
+/index.html
+__pycache__/
+.ruff_cache/

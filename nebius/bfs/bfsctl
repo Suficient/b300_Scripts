@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# bfsctl models | selfcheck | start test | start full 720|1080 | stop | status | plan PAIR RES
+exec python /opt/bfs/runner.py "$@"

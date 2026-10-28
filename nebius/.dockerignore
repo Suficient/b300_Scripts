@@ -1,0 +1,4 @@
+*
+!Dockerfile
+!bfs/
+bfs/__pycache__/
