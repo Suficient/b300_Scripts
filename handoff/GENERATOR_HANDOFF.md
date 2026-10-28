@@ -54,7 +54,8 @@ generator.
 - **Running now:** BFS V3 head swap (LTX-2.3, image `squishydolphin/bfs-v3-comfyui:latest`) over the pairs that
   didn't finish on the old VM. 8 containers `bfs23-0..7` (one per GPU, ComfyUI on 127.0.0.1:8188-8195), runner
   `python3 ~/bfs_v3/run_pairs.py /data/v3/full /data/outputs/full_v3 --gpus 8`, log `~/bfs_v3/resume.log`.
-  Restarted 10:30 IST with 2,749 pairs left; ~60 s per pair per GPU, so expect it to finish ~16:30-17:30 IST.
+  Restarted 10:30 UTC (the VM's clock is UTC; 16:00 IST) with 2,749 pairs left. Measured at 11:03-11:13 UTC:
+  ~430 pairs/hour (60-65 s per pair per GPU), 2,519 left, so it should finish ~17:00 UTC (~22:30 IST).
 - **Memory leak found and (probably) fixed:** each ComfyUI kept ~7.5 GB of host RAM per job (300 GB per container
   after ~39 jobs; the VM nearly ran out). Containers were recreated with
   `--memory 320g --restart unless-stopped -e MALLOC_MMAP_THRESHOLD_=4194304 -e MALLOC_ARENA_MAX=4`.
