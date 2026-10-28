@@ -11,8 +11,10 @@ Contents:
 - `handoff/GENERATOR_HANDOFF.md`: this file.
 - `handoff/research/`: the three full research reports (identity swap; audio/motion-driven; full synthesis + threat
   landscape + detection benchmarks), with every source URL. Read the one for a generator before working on it.
-- `handoff/df-benchmark/`: snapshot of the generator repo's working tree, **including its uncommitted work** (see
-  5). The real repo is on the PC at `~/Projects/Code/df-benchmark` (not pushed anywhere).
+- `handoff/df-benchmark/`: **reference only.** Older, separate work (a DGX Spark timing harness). It matters here
+  because GENERATORS.md (the original list this audit started from) and its per-generator setup.sh/run.sh (how each
+  repo installs and is called) live there, and because today's `generators/pairio.py` was written into it. Build
+  the B300 work in this repo (section 5); don't modify df-benchmark.
 - The rest of this repo: the pair builder + Nebius VM scripts (section 5).
 - Sample pairs are not in git (they hold real faces). For local tests copy a few from the VM
   (`/data/inputs/pairs4/NNNN`, after the upload in section 7 adds the missing files) or from the PC's `pairs4/`.
@@ -67,11 +69,9 @@ generator.
   finished pairs) to retry them.
 - GPUs idled ~50% (each ComfyUI does CPU work — decode, 3 ffmpeg encodes — between GPU phases). A second ComfyUI per
   GPU would fix that, but only if memory is flat. Not worth doing this late in the run.
-- **When BFS is done:** pull results, then clean up:
-  - Pull: `cd nebius; BFS_VM=sufi@IP ./vm.sh pull` (copies `/data/outputs/` into
-    `../nebius_out/`, every 2 min; Ctrl-C when the count stops rising). The PC also has 146 earlier results in its
-    `nebius_out/full_v3`.
-  - Cleanup on the VM: `BFS_VM=... ./v3_resume.sh stop` removes `bfs23-0..7`.
+- The Mac is already running `./vm.sh pull` (copies `/data/outputs/` into `nebius_out/` every 2 min). The PC also
+  has the 146 results the old VM made, in its `nebius_out/full_v3`.
+- **When BFS is done** (the pull count stops rising): `BFS_VM=... ./v3_resume.sh stop` removes `bfs23-0..7`.
 - VM gotchas learned: `docker rm -f` on a container holding hundreds of GB returns before it's gone (retry until
   `docker inspect` fails); `pkill -f "[b]fs_v3/..."` bracket pattern avoids matching the caller; pasted blocks'
   last line may need Enter; `setsid ... &` prints `[1]+ Done` immediately (normal); a dead ComfyUI makes
@@ -81,7 +81,7 @@ generator.
 ## 4. The final generator list (24 methods + H3)
 
 Families matter more than individual models (artifacts differ more between families). Status is relative to
-`GENERATORS.md` in df-benchmark, which needs these fixes. Details, numbers and sources: `research/`.
+`GENERATORS.md` in df-benchmark (now superseded by this table). Details, numbers and sources: `research/`.
 
 | # | Folder name | Method | Type | Family | Status | Key facts / flags |
 |---|---|---|---|---|---|---|
@@ -131,23 +131,23 @@ measured; measure on 8 pairs per generator first).
 
 ## 5. Code state
 
-**df-benchmark** (`handoff/df-benchmark`; on the PC `~/Projects/Code/df-benchmark`), HEAD 85fea6f, plus **uncommitted
-work from 2026-10-07** (README, config.example.toml, df_benchmark/comfy.py, run.py, generators/common.sh, lib.sh,
-tests; untracked generators/bfs-ltx23/, generators/env.sh, setup_spark.sh, uninstall_spark.sh) and **today's new
-`generators/pairio.py`**. Ask the user before committing; never add Co-Authored-By/Claude trailers.
+**Where the B300 generator work goes:** this repo, in a new `generators/` folder (`generators/<name>/setup.sh` +
+`batch.py`, shared helpers next to them). Never add Co-Authored-By/Claude trailers to commits.
+
+**df-benchmark, reference only** (`handoff/df-benchmark`; the PC's `~/Projects/Code/df-benchmark` has uncommitted
+work from 2026-10-07; leave it alone). Useful pieces to copy from, not to extend:
 - Built for a DGX Spark (aarch64, GB10 sm_121, Python 3.11, torch cu130). `generators/<name>/setup.sh` installs into
   `$GEN_ROOT/<name>` (default `~/df-gen`) using helpers in `generators/common.sh`: `clone URL [COMMIT]`,
   `venv [PY] [notorch]`, `install PKG...` (never replaces torch), `reqs FILE...` (drops torch/xformers/flash-attn,
   decord→decord2, mediapipe→0.10.14, onnxruntime→onnxruntime-gpu), `flash_attn` (builds FA 2.8.3 for **sm_120**),
   `mmlab` (mmcv for **sm_120**), `fetch URL DIR`, `hf ARGS` (`hf download`). `env.sh` points every cache into
-  `$GEN_ROOT`. These arch lists are the main thing to make x86_64/B300-aware (sm_100 code runs on sm_103).
+  `$GEN_ROOT`. On the B300 the arch lists become sm_100 (its code runs on sm_103); no Spark support is needed here.
 - `generators/<name>/run.sh` is a one-clip-per-process timing harness (env contract in `generators/lib.sh`:
   DFB_VIDEO, DFB_VIDEO_25, DFB_AUDIO, DFB_REF, DFB_REF_FRAME, DFB_REF_AUDIO, DFB_PROMPT, DFB_SEED, DFB_TMP, DFB_OUT,
   DFB_DURATION). Existing run.sh files show how each repo is called (useful starting points).
-- `GENERATORS.md` explains the original 15 picks; update it to the list in section 4 (fix the flagged rows).
-- `df_benchmark/generators.py` maps generator name → category; new names need entries there.
 
-**`generators/pairio.py` (new, tested on CPU with a dummy generator):** batch mode. Each generator gets
+**`pairio.py` (new; in `handoff/df-benchmark/generators/`, move it to this repo's `generators/`; tested on CPU with a
+dummy generator):** batch mode. Each generator gets
 `generators/<name>/batch.py`:
 ```python
 import sys; from pathlib import Path
@@ -169,7 +169,8 @@ and the video) + NNNN.json (seconds, gpu, seed, settings); logs and skips failur
 `ffmpeg(...)`, `finish(...)`, `probe(...)`. Optional env `PAIRIO_TMP` for scratch.
 
 **This repo** (b300_Scripts; on the PC `~/Projects/Code/Precomputed-ltx`). `build.py` builds the A/B pairs (`pairs4/`, 3,228 pairs, 18 GB, only on
-the PC; the VM has a subset under `/data/inputs/pairs4`, see 7). `bfs_v3/run_pairs.py` = BFS ComfyUI batch driver.
+the PC; the VM has a subset under `/data/inputs/pairs4`, see 7). `select_pairs.py` picks the shared pair set
+(`select500.txt`, with every candidate's numbers and drop reasons in `select500.csv`; see 7). `bfs_v3/run_pairs.py` = BFS ComfyUI batch driver.
 `nebius/` = VM tooling: `vm.sh` (setup/test/full/status/pull; the LTX-2.5 BFS image), `v3_test.sh`, `v3_full.sh`,
 `v3_resume.sh` (fresh-VM resume of the LTX-2.3 run), `actions/actions.py` (Qwen3.5-27B ACTION captions).
 
@@ -191,12 +192,13 @@ the PC; the VM has a subset under `/data/inputs/pairs4`, see 7). `bfs_v3/run_pai
 Goal: for every generator in section 4 (except bfs-ltx23), a verified recipe that installs it on the B300 VM,
 downloads its weights, and runs it in batch mode over the pair folders, tuned for quality and B300 throughput.
 
-**Where verification can happen from the Mac:** macOS arm64 has no CUDA, so Linux CUDA wheels can't be installed
-natively. Use (a) `uv pip compile ... --python-platform x86_64-manylinux_2_28 --python-version 3.11
---extra-index-url https://download.pytorch.org/whl/cu130` for dependency resolution, (b) the GitHub/HF APIs for
-pins, sizes, gating and licences, (c) Docker with `--platform linux/amd64` only if a real install is essential
-(emulated, slow), and (d) **the VM itself once BFS is done**: real installs, real GPU smoke tests. (d) is the
-real verification; plan around it.
+**Where the work runs:** the Mac writes the scripts and checks pins/licences/gating (GitHub and HF APIs) and
+dependency resolution (`uv pip compile ... --python-platform x86_64-manylinux_2_28 --python-version 3.11
+--extra-index-url https://download.pytorch.org/whl/cu130`; macOS has no CUDA). Real installs, downloads and tests
+happen on the VM over SSH, **while BFS keeps running**: installs and downloads only use CPU, network and /data
+disk; a 2-pair smoke test can share a GPU with BFS (each BFS container uses ~50 of ~275 GB), slowing BFS a little,
+or wait until BFS ends. Keep installs off `/data/v3` and `/data/outputs/full_v3`, and don't touch the `bfs23-*`
+containers or `~/bfs_v3`.
 
 Verification levels to report per generator: **L0** weights (HF repo + revision sha + files + size, gated?,
 licences; non-HF links answer); **L1** install resolves/installs on x86_64 + torch cu130 (overridden pins listed);
@@ -213,18 +215,25 @@ and VRAM allows (report VRAM per worker); SDPA/FA2; no growing per-pair caches; 
 high-quality encode (libx264 crf <= 17, yuv420p); right audio (A's for swaps/reenactment/talking heads driven by A,
 B's for lip sync).
 
-Agent split (each at **high effort**; only the platform agent may edit `pairio.py` (bug fixes only, API frozen),
-`common.sh`, `lib.sh`, `env.sh`, `setup_spark.sh`; generator agents own their `generators/<name>/` folders and
-request shared changes as diffs; one folder per method, extra method folders reuse another install):
-1. **Platform:** make common.sh/env.sh/lib.sh arch-aware for x86_64/B300 without changing Spark behaviour (torch
-   cu130 arch list, FA2 for sm_100 (prebuilt wheel if trustworthy, else VM build recipe), mmcv arch, decord/decord2,
-   mediapipe pin, onnxruntime-gpu with cuDNN 9 on a CUDA 13 driver, nvcc for source builds); a VM installer
-   (`setup_b300.sh` or a dual-arch setup_spark.sh; GEN_ROOT=/data/df-gen); the batch driver (round-robin per-worker
-   lists, K workers per GPU, `--gpus`, `--list`/`--limit`, start/status/stop/smoke, detached, logs, outputs in
-   OUT_ROOT/<name>/; a dead worker must not fail the queue); the upload of the missing pair files (the VM's
-   `/data/inputs/pairs4` has only a_guide.mp4, b_face_1024.png, caption.txt (+caption_v3/action) for the 3,082 pairs
-   BFS still had; generators need all 3,228 pairs and b_face_512.jpg, b_frame.jpg, b_source.mp4, job.json. Note: the
-   full pairs4 is on the PC, so this upload needs the PC or a copy of pairs4); a README "B300" section.
+**The shared pair set:** `select_pairs.py` (run on the PC, where pairs4 and the Clipfarmer snapshot are) picked
+500 of the 3,082 pairs on the VM most likely to give good fakes with every generator. Hard filters: both clips
+>= 50% speech (webrtcvad), A's yaw <= 25 and pitch <= 20, no hands near A's or B's face, no sunglasses or headwear,
+B's crop >= 200 px and >= 0.8 ArcFace match to B, age gap <= 15 (1,852 pass). Then a z-scored quality score (A
+sharpness, bitrate, face size, frontal, steady, well lit, no glasses; B crop size, identity match; age and hair
+match; speech) and a greedy pick: each person at most once as A and once as B (51 A people appear twice to reach
+500), gender x skin groups at their share of the candidates. The VM already had a_guide.mp4, b_face_1024.png and
+caption.txt for these; the PC uploads b_source.mp4, b_frame.jpg, b_face_512.jpg and job.json for them (~0.7 GB)
+plus `/data/inputs/select500.txt`. Check on the VM that `/data/inputs/pairs4/<each pair>/b_source.mp4` exists.
+
+Agent split (each at **high effort**; only the platform agent edits the shared files in `generators/`
+(`pairio.py`: bug fixes only, API frozen); generator agents own their `generators/<name>/` folders and request
+shared changes as diffs; one folder per method, extra method folders reuse another install):
+1. **Platform:** `generators/common.sh` for x86_64/B300, adapted from df-benchmark's helpers (torch cu130 and its
+   arch list, FA2 for sm_100 (prebuilt wheel if trustworthy, else VM build recipe), mmcv arch, decord vs decord2,
+   mediapipe pin, onnxruntime-gpu with cuDNN 9 on a CUDA 13 driver, nvcc for source builds); `setup_b300.sh` (VM
+   installer, GEN_ROOT=/data/gen); the batch driver (round-robin per-worker lists, K workers per GPU, `--gpus`,
+   `--list`/`--limit`, start/status/stop/smoke, detached, logs, outputs in OUT_ROOT/<name>/; a dead worker must not
+   fail the queue; runs on the GPUs it's given so smoke tests can share a GPU with BFS); a README "B300" section.
 2. **Small/per-frame models:** facefusion-inswapper, facefusion, facefusion-alphaface, canonswap, liveportrait,
    personalive, wav2lip, musetalk.
 3. **Wan family swaps/animation:** dreamid-v, wan-animate, wan-animate-2, scail-2, x-dub.
@@ -236,8 +245,8 @@ request shared changes as diffs; one folder per method, extra method folders reu
 Each agent reports: level reached per generator, exact pins, files created/changed, settings + K + expected VRAM
 and seconds/pair (with basis), blockers and fixes, shared-file diffs requested, gated repos, disk left behind.
 
-Then: update GENERATORS.md and df_benchmark/generators.py, run the platform installer + smoke tests on the VM,
-time 8 pairs per generator, then the 500-pair run.
+Then: run the platform installer + smoke tests on the VM, time 8 pairs per generator, then the 500-pair run over
+`/data/inputs/select500.txt` once BFS is finished.
 
 ## 8. Working with this user
 
