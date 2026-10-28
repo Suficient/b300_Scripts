@@ -1,0 +1,19 @@
+# environment
+.venv/
+__pycache__/
+.pytest_cache/
+
+# machine-local config (copy config.example.toml)
+config.toml
+
+# downloaded weights
+models/
+
+# faces: never commit these
+clips/
+work/
+results/
+*.sqlite
+
+# exported ComfyUI workflows are machine-local
+workflows/*.json

@@ -1,0 +1,23 @@
+[project]
+name = "df-benchmark"
+version = "0.1.0"
+description = "Times deepfake generators on a DGX Spark: fakes the same clips with each one"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+    "requests>=2.32",
+    # CUDA 13 build on the Spark (Linux ARM64), CPU build everywhere else
+    "onnxruntime-gpu[cuda,cudnn]>=1.30.0; sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "onnxruntime>=1.30.0; sys_platform != 'linux' or platform_machine != 'aarch64'",
+]
+
+[project.scripts]
+df-benchmark = "df_benchmark.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]

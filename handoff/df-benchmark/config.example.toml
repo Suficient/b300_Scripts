@@ -1,0 +1,22 @@
+# Copy to config.toml. Every key is optional; defaults are in df_benchmark/config.py.
+
+clipfarmer_db = "~/imprint/clipfarmer/data/clipfarmer.sqlite"
+clipfarmer_root = "~/imprint/clipfarmer"
+clips_dir = "clips"
+work_dir = "work"
+results_dir = "results"
+gen_root = "~/df-gen"      # generators/<name>/setup.sh installs into <gen_root>/<name>
+
+seed = 42
+
+# A second FaceFusion entry with the swapper Deep-Live-Cam / Roop / ReActor use.
+[generators.facefusion-inswapper]
+script = "facefusion"
+env = { FF_MODEL = "inswapper_128", FF_ENHANCE = "1" }
+
+# BFS head swap: the fake-pipeline workflow (LTX-2.3 + BFS v3 LoRA) in API format, written by
+# generators/bfs-ltx23/setup.sh. Node ids are from workflow_ltx2_head_swap_drag_and_drop_v3.0.
+[comfy.bfs-ltx23]
+workflow = "workflows/bfs_v3_api.json"
+output_node = "341"
+inputs = { video = "345.video", ref = "269.image", seed = "377.noise_seed" }
