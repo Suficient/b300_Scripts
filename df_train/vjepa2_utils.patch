@@ -1,0 +1,38 @@
+diff --git a/evals/video_classification_frozen/utils.py b/evals/video_classification_frozen/utils.py
+index 91b29a2..c163493 100644
+--- a/evals/video_classification_frozen/utils.py
++++ b/evals/video_classification_frozen/utils.py
+@@ -107,6 +107,18 @@ class VideoTransform(object):
+         if not self.training:
+             return [self.eval_transform(buffer)]
+ 
++        # Crop first, then RandAugment and normalize at crop_size: the augmentation used to run on full-resolution
++        # frames (~10 s per 1080p clip) and starved the GPUs. The crop is drawn and resized exactly as before.
++        buffer = torch.as_tensor(np.asarray(buffer)).permute(3, 0, 1, 2).float()  # T H W C -> C T H W
++        buffer = self.spatial_transform(
++            images=buffer,
++            target_height=self.crop_size,
++            target_width=self.crop_size,
++            scale=self.random_resize_scale,
++            ratio=self.random_resize_aspect_ratio,
++        )
++        buffer = buffer.round().clamp(0, 255).to(torch.uint8).permute(1, 2, 3, 0).numpy()  # C T H W -> T H W C
++
+         buffer = [transforms.ToPILImage()(frame) for frame in buffer]
+ 
+         if self.auto_augment:
+@@ -118,14 +130,6 @@ class VideoTransform(object):
+ 
+         buffer = tensor_normalize(buffer, self.normalize[0], self.normalize[1])
+         buffer = buffer.permute(3, 0, 1, 2)  # T H W C -> C T H W
+-
+-        buffer = self.spatial_transform(
+-            images=buffer,
+-            target_height=self.crop_size,
+-            target_width=self.crop_size,
+-            scale=self.random_resize_scale,
+-            ratio=self.random_resize_aspect_ratio,
+-        )
+         if self.random_horizontal_flip:
+             buffer, _ = video_transforms.horizontal_flip(0.5, buffer)
+ 

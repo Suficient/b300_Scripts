@@ -1,0 +1,177 @@
+diff --git a/evals/video_classification_frozen/eval.py b/evals/video_classification_frozen/eval.py
+index 8715125..32a0353 100644
+--- a/evals/video_classification_frozen/eval.py
++++ b/evals/video_classification_frozen/eval.py
+@@ -18,9 +18,11 @@ except Exception:
+ import logging
+ import math
+ import pprint
++import time
+ 
+ import numpy as np
+ import torch
++import wandb
+ import torch.multiprocessing as mp
+ import torch.nn.functional as F
+ from torch.nn.parallel import DistributedDataParallel
+@@ -89,6 +91,8 @@ def main(args_eval, resume_preempt=False):
+     duration = args_data.get("clip_duration", None)
+     num_views_per_segment = args_data.get("num_views_per_segment", 1)
+     normalization = args_data.get("normalization", None)
++    random_resize_scale = tuple(args_data.get("random_resize_scale", (0.08, 1.0)))
++    reprob = args_data.get("reprob", 0.25)
+ 
+     # -- OPTIMIZATION
+     args_opt = args_exp.get("optimization")
+@@ -135,6 +139,29 @@ def main(args_eval, resume_preempt=False):
+     if rank == 0:
+         csv_logger = CSVLogger(log_file, ("%d", "epoch"), ("%.5f", "train_acc"), ("%.5f", "val_acc"))
+ 
++    # -- wandb (rank 0 only; WANDB_MODE=disabled turns it off). A training run's id is its tag, so a restart
++    # -- resumes the same run; a val_only run gets a fresh id.
++    if rank == 0 and os.environ.get("WANDB_MODE") != "disabled":
++        try:
++            wandb.init(
++                project=os.environ.get("WANDB_PROJECT", "vjepa-deepfake-probe"),
++                name=eval_tag,
++                id=None if val_only else eval_tag,
++                resume=None if val_only else "allow",
++                job_type="val_only" if val_only else "train",
++                dir=folder,
++                config=args_eval,
++                settings=wandb.Settings(init_timeout=120),
++            )
++            wandb.define_metric("train/step")
++            wandb.define_metric("train/*", step_metric="train/step")
++            wandb.define_metric("epoch")
++            wandb.define_metric("epoch/*", step_metric="epoch")
++            wandb.define_metric("val_heads/*", step_metric="epoch")
++            wandb.config.update({"head_lr_wd": [(k["ref_lr"], k["ref_wd"]) for k in opt_kwargs]}, allow_val_change=True)
++        except Exception as e:
++            logger.warning(f"wandb.init failed, training without it: {e}")
++
+     # Initialize model
+ 
+     # -- init models
+@@ -177,6 +204,8 @@ def main(args_eval, resume_preempt=False):
+         training=True,
+         num_workers=num_workers,
+         normalization=normalization,
++        random_resize_scale=random_resize_scale,
++        reprob=reprob,
+     )
+     val_loader, _ = make_dataloader(
+         dataset_type=dataset_type,
+@@ -235,9 +264,12 @@ def main(args_eval, resume_preempt=False):
+             "world_size": world_size,
+         }
+         if rank == 0:
+-            torch.save(save_dict, latest_path)
++            # write then rename, so a kill mid-save never leaves a truncated latest.pt
++            torch.save(save_dict, latest_path + ".tmp")
++            os.replace(latest_path + ".tmp", latest_path)
+ 
+     # TRAIN LOOP
++    val_heads = []  # per-head val top-1 of the last epoch, filled by run_one_epoch
+     for epoch in range(start_epoch, num_epochs):
+         logger.info("Epoch %d" % (epoch + 1))
+         train_sampler.set_epoch(epoch)
+@@ -255,6 +287,7 @@ def main(args_eval, resume_preempt=False):
+                 wd_scheduler=wd_scheduler,
+                 data_loader=train_loader,
+                 use_bfloat16=use_bfloat16,
++                step0=epoch * ipe,
+             )
+ 
+         val_acc = run_one_epoch(
+@@ -268,17 +301,27 @@ def main(args_eval, resume_preempt=False):
+             wd_scheduler=wd_scheduler,
+             data_loader=val_loader,
+             use_bfloat16=use_bfloat16,
++            heads_out=val_heads,
+         )
+ 
+         logger.info("[%5d] train: %.3f%% test: %.3f%%" % (epoch + 1, train_acc, val_acc))
+         if rank == 0:
+             csv_logger.log(epoch + 1, train_acc, val_acc)
++            if wandb.run is not None:
++                wandb.log({"epoch": epoch + 1, "epoch/train_acc": train_acc, "epoch/val_acc": val_acc,
++                           "epoch/best_head": int(np.argmax(val_heads)),
++                           **{f"val_heads/head_{i:02d}": a for i, a in enumerate(val_heads)}})
+ 
+         if val_only:
++            if wandb.run is not None:
++                wandb.finish()
+             return
+ 
+         save_checkpoint(epoch + 1)
+ 
++    if wandb.run is not None:
++        wandb.finish()
++
+ 
+ def run_one_epoch(
+     device,
+@@ -291,6 +334,8 @@ def run_one_epoch(
+     wd_scheduler,
+     data_loader,
+     use_bfloat16,
++    step0=0,
++    heads_out=None,
+ ):
+ 
+     for c in classifiers:
+@@ -298,6 +343,7 @@ def run_one_epoch(
+ 
+     criterion = torch.nn.CrossEntropyLoss()
+     top1_meters = [AverageMeter() for _ in classifiers]
++    t_last = time.time()
+     for itr, data in enumerate(data_loader):
+         if training:
+             [s.step() for s in scheduler]
+@@ -352,7 +398,24 @@ def run_one_epoch(
+                     torch.cuda.max_memory_allocated() / 1024.0**2,
+                 )
+             )
+-
++            if training and wandb.run is not None:
++                with torch.no_grad():
++                    head_loss = [float(sum(li)) / len(li) for li in losses]
++                wandb.log({
++                    "train/step": step0 + itr,
++                    "train/top1_best": _agg_top1.max(),
++                    "train/top1_mean": _agg_top1.mean(),
++                    "train/top1_min": _agg_top1.min(),
++                    "train/loss_mean": float(np.mean(head_loss)),
++                    "train/loss_min": float(np.min(head_loss)),
++                    "train/lr_head00": optimizer[0].param_groups[0]["lr"],
++                    "train/sec_per_step": (time.time() - t_last) / (10 if itr else 1),
++                    "train/max_mem_gb_gpu0": torch.cuda.max_memory_allocated() / 1024.0**3,
++                })
++            t_last = time.time()
++
++    if heads_out is not None:
++        heads_out[:] = [float(a) for a in _agg_top1]
+     return _agg_top1.max()
+ 
+ 
+@@ -428,6 +491,8 @@ def make_dataloader(
+     num_workers=12,
+     subset_file=None,
+     normalization=None,
++    random_resize_scale=(0.08, 1.0),
++    reprob=0.25,
+ ):
+     if normalization is None:
+         normalization = DEFAULT_NORMALIZATION
+@@ -438,8 +503,8 @@ def make_dataloader(
+         num_views_per_clip=num_views_per_segment,
+         random_horizontal_flip=False,
+         random_resize_aspect_ratio=(0.75, 4 / 3),
+-        random_resize_scale=(0.08, 1.0),
+-        reprob=0.25,
++        random_resize_scale=random_resize_scale,
++        reprob=reprob,
+         auto_augment=True,
+         motion_shift=False,
+         crop_size=img_size,
