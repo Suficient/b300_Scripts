@@ -1,0 +1,28 @@
+name,sec,k,load_s,basis,of
+facefusion-inswapper,15,1,25,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+facefusion,11,1,39,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+facefusion-alphaface,9,1,32,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+canonswap,51,1,149,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+liveportrait,17,1,127,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+personalive,15,1,69,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+wav2lip,12,1,13,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+musetalk,34,1,90,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+dreamid-v,128,1,200,measured: smoke 2nd pair at 832*480; load ~80 s + 121 s first-pair warm-up (k=1),
+wan-animate,450,1,180,est: 160 s/124 frames 480p on B200 (Viggle); 720p,
+wan-animate-2,450,1,180,est: as wan-animate,
+x-dub,90,1,32,measured: smoke 2nd pair; load 23 s + 9 s first-pair warm-up (k=1),
+infinitetalk,1866,1,180,"measured: smoke 2nd pair, FA2 + CPU overload (cuDNN shim now)",
+infinitetalk-v2v,300,1,180,est: as infinitetalk,
+soulx-flashtalk,13,1,86,measured: smoke 2nd pair; load 30 s + first-pair torch.compile 56 s (k=1),
+longcat-avatar,87,1,190,measured: smoke 2nd pair; load 75 s + 117 s warm-up (k=1),
+hunyuan-avatar,3238,1,180,"measured: smoke 1st pair, bf16 + FA2, shared GPU (now fp8 + cuDNN)",
+hallo2,78,1,76,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+latentsync,57,1,101,"measured: smoke, 2nd pair; load = run - 2*sec (k=1)",
+ltx-a2v,103,1,40,measured: smoke 2nd pair (k=1),
+davinci-magihuman,23,1,340,measured: smoke 2nd pair; load 79 s + 261 s first-pair warm-up/compile (k=1),
+kandinsky6,62,1,66,measured: smoke 2nd pair; load 29 s + 37 s first-pair warm-up (k=1),
+infinitetalk-fast,200,1,180,"est: 4 steps vs 40, cfg passes 1 vs 3",infinitetalk
+infinitetalk-v2v-fast,200,1,180,est: as infinitetalk-fast,infinitetalk-v2v
+wan-animate-2-fast,100,1,180,"est: 10 steps vs 40, guide 1",wan-animate-2
+dreamid-v-faster,90,1,120,"est: 16 steps, no pose",dreamid-v
+hunyuan-avatar-fast,900,1,120,est: DeepCache ~2x,hunyuan-avatar

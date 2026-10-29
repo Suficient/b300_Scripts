@@ -6,7 +6,7 @@
 #   ./vm.sh test          10 pairs at 720p and at 1080p
 #   ./vm.sh full 1080     every pair at 1080p (or: ./vm.sh full 720)
 #   ./vm.sh status        progress, seconds per job, time and cost left
-#   ./vm.sh pull          copy finished videos to this PC every 2 min (Ctrl-C to stop)
+#   ./vm.sh pull          copy finished videos (BFS, and generators into nebius_out/gen/) every 2 min (Ctrl-C to stop)
 #   ./vm.sh stop          finish the jobs in progress, start nothing new
 #   ./vm.sh logs          follow the runner log
 #   ./vm.sh ui            open GPU 0's ComfyUI at http://localhost:8188 (for debugging)
@@ -62,10 +62,12 @@ case "${1:-}" in
         ;;
     pull)
         mkdir -p "$OUT"
-        echo "[vm.sh] copying /data/outputs to $OUT every 2 min (Ctrl-C to stop)"
+        echo "[vm.sh] copying /data/outputs to $OUT and /data/gen_out to $OUT/gen every 2 min (Ctrl-C to stop)"
         while true; do
             if rsync -a --partial --exclude='*.part.mp4' --exclude='*.part' -e "ssh ${SSH_OPTS[*]} -o ConnectTimeout=20" \
-                "$VM:/data/outputs/" "$OUT/"; then
+                "$VM:/data/outputs/" "$OUT/" &&
+               rsync -a --partial --exclude='*.part' -e "ssh ${SSH_OPTS[*]} -o ConnectTimeout=20" \
+                "$VM:/data/gen_out/" "$OUT/gen/"; then
                 echo "[vm.sh] $(date +%H:%M) $(find "$OUT" -name '*.mp4' -not -path '*/inputs/*' | wc -l) videos here"
             else
                 echo "[vm.sh] $(date +%H:%M) VM not reachable, trying again in 2 min"

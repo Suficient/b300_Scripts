@@ -113,9 +113,9 @@ def frames(seconds, fps, step, offset):
 
 
 def finish(video, audio, out, duration):
-    """out = video's stream (copied) + audio's first audio stream as AAC, cut to duration or the video's length,
-    whichever is shorter, so the sound never runs past the picture."""
-    duration = min(duration, float(probe(video)["format"]["duration"]))
+    """out = video's stream (copied) + audio's first audio stream as AAC, cut to duration, the video's length or the
+    audio's, whichever is shortest, so neither runs past the other."""
+    duration = min(duration, *(float(probe(f)["format"]["duration"]) for f in (video, audio)))
     ffmpeg("-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
            "-t", f"{duration:.3f}", "-f", "mp4", out)
 
@@ -139,11 +139,14 @@ def run(load, make, settings=None):
     model = load()
     log(f"{tag} gpu {gpu}: loaded in {time.time() - t0:.0f} s")
     failed = 0
+    scratch = os.environ.get("PAIRIO_TMP")
+    if scratch:
+        os.makedirs(scratch, exist_ok=True)
     for d in todo:
         dest = a.out / f"{d.name}.mp4"
         if dest.exists():
             continue
-        tmp = Path(tempfile.mkdtemp(prefix=f"{tag}-{d.name}-", dir=os.environ.get("PAIRIO_TMP")))
+        tmp = Path(tempfile.mkdtemp(prefix=f"{tag}-{d.name}-", dir=scratch))
         t = time.time()
         try:
             p = Pair(d, tmp)
